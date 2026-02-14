@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vibe-ADE Download</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --bg: #0d0d0d;
+        --card: #161616cc;
+        --border: #333;
+        --text: #ededed;
+        --dim: #a0a0a0;
+        --accent: #8bffc4;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(circle at 20% 10%, #1f1f1f 0%, var(--bg) 45%, #090909 100%);
+        color: var(--text);
+        font-family: Inter, "Segoe UI", sans-serif;
+        display: grid;
+        place-items: center;
+        padding: 20px;
+      }
+      .card {
+        width: min(720px, 100%);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--card);
+        backdrop-filter: blur(8px);
+        padding: 28px;
+      }
+      h1 { margin: 0; font-size: 2rem; }
+      p { color: var(--dim); line-height: 1.5; }
+      .meta {
+        display: flex;
+        gap: 8px;
+        margin: 16px 0 24px;
+        flex-wrap: wrap;
+      }
+      .tag {
+        font-size: 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 4px 10px;
+        color: var(--dim);
+      }
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .btn {
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 11px 16px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        color: var(--text);
+        background: #1d1d1d;
+        font-weight: 600;
+      }
+      .btn.primary {
+        background: linear-gradient(135deg, #1b3c31, #103027);
+        border-color: #2d6d57;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <h1>Vibe-ADE</h1>
+      <p>Windows-first Agent Development Environment with multi-pane terminals, slash routing, and secure model vault settings.</p>
+      <div class="meta">
+        <span class="tag">Windows</span>
+        <span class="tag">Version v0.1.0-beta</span>
+        <span class="tag">Electron + React</span>
+      </div>
+      <div class="actions">
+        <a class="btn primary" href="https://github.com/whothemyst-byte/vibe-ade/raw/refs/tags/v0.1.0-beta/release/Vibe-ADE-0.1.0-setup.exe">Download .exe</a>
+        <a class="btn" href="https://github.com/whothemyst-byte/vibe-ade/blob/v0.1.0-beta/RELEASE_NOTES_v0.1.0-beta.md">Release Notes</a>
+      </div>
+    </main>
+  </body>
+</html>
