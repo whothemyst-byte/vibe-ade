@@ -203,16 +203,37 @@ function createWindow(): void {
     }
   });
 
+  mainWindow.webContents.on("did-fail-load", (_event, code, description, url) => {
+    void mainWindow?.loadURL(
+      `data:text/html,${encodeURIComponent(
+        `<html><body style="background:#0d0d0d;color:#e7e7e7;font-family:Segoe UI;padding:20px">
+        <h2>Vibe-ADE Startup Error</h2>
+        <p>Renderer failed to load.</p>
+        <p><b>Code:</b> ${code}</p>
+        <p><b>Description:</b> ${description}</p>
+        <p><b>URL:</b> ${url}</p>
+        <p>Please reinstall with the latest build.</p>
+        </body></html>`
+      )}`
+    );
+  });
+
   const devUrl = process.env.VITE_DEV_SERVER_URL || process.env.ELECTRON_START_URL;
   if (devUrl) {
     void mainWindow.loadURL(devUrl);
     return;
   }
 
-  const staticHtml = path.join(process.cwd(), "dist", "index.html");
-  if (fs.existsSync(staticHtml)) {
-    void mainWindow.loadFile(staticHtml);
-    return;
+  const packagedHtml = path.join(__dirname, "..", "dist", "index.html");
+  const cwdHtml = path.join(process.cwd(), "dist", "index.html");
+  const appPathHtml = path.join(app.getAppPath(), "dist", "index.html");
+  const candidates = [packagedHtml, appPathHtml, cwdHtml];
+
+  for (const file of candidates) {
+    if (fs.existsSync(file)) {
+      void mainWindow.loadFile(file);
+      return;
+    }
   }
 
   void mainWindow.loadURL("http://localhost:5173");
