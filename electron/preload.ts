@@ -8,6 +8,7 @@ interface VaultSettings {
   localModel: string;
   cloudModel: string;
   executionMode: ExecutionMode;
+  systemWideAcknowledged: boolean;
 }
 
 interface AgentChunkEvent {
@@ -20,7 +21,8 @@ interface AgentChunkEvent {
 
 interface AgentRoutedEvent {
   paneId: string;
-  model: "Local" | "GPT-4o";
+  model: "Local" | "Cloud";
+  modelName: string;
   route: "local" | "cloud";
 }
 
@@ -41,9 +43,13 @@ interface RuntimeInfo {
 
 const api = {
   createPane: (paneId: string) => ipcRenderer.invoke("pane:create", paneId),
+  destroyPane: (paneId: string) => ipcRenderer.invoke("pane:destroy", paneId),
+  restartPane: (paneId: string) => ipcRenderer.invoke("pane:restart", paneId),
   resizePane: (paneId: string, cols: number, rows: number) => ipcRenderer.invoke("pane:resize", paneId, cols, rows),
   sendShellLine: (paneId: string, line: string) => ipcRenderer.invoke("shell:line", paneId, line),
   runAgent: (paneId: string, route: "local" | "cloud", prompt: string) => ipcRenderer.invoke("agent:run", paneId, route, prompt),
+  cancelAgent: (paneId: string) => ipcRenderer.invoke("agent:cancel", paneId),
+  getWorkspacePath: () => ipcRenderer.invoke("workspace:get") as Promise<string>,
   getRuntime: () => ipcRenderer.invoke("runtime:get") as Promise<RuntimeInfo>,
   getVault: () => ipcRenderer.invoke("vault:get") as Promise<VaultSettings>,
   setVault: (next: Partial<VaultSettings> & { executionMode?: ExecutionMode }) => ipcRenderer.invoke("vault:set", next),

@@ -2,9 +2,13 @@ import type { AgentChunkEvent, AgentRoutedEvent, ExecutionMode, PtyDataEvent, Pt
 
 interface VibeBridge {
   createPane: (paneId: string) => Promise<void>;
+  destroyPane: (paneId: string) => Promise<void>;
+  restartPane: (paneId: string) => Promise<void>;
   resizePane: (paneId: string, cols: number, rows: number) => Promise<void>;
   sendShellLine: (paneId: string, line: string) => Promise<void>;
   runAgent: (paneId: string, route: "local" | "cloud", prompt: string) => Promise<void>;
+  cancelAgent: (paneId: string) => Promise<void>;
+  getWorkspacePath: () => Promise<string>;
   getRuntime: () => Promise<RuntimeInfo>;
   getVault: () => Promise<VaultSettings>;
   setVault: (next: Partial<VaultSettings> & { executionMode?: ExecutionMode }) => Promise<boolean>;

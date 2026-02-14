@@ -14,6 +14,7 @@ interface VaultData {
   localModel: string;
   cloudModel: string;
   executionMode: ExecutionMode;
+  systemWideAcknowledged: boolean;
 }
 
 const store = new Store<VaultData>({
@@ -23,23 +24,38 @@ const store = new Store<VaultData>({
     cloudApiBaseUrl: "https://api.openai.com/v1/chat/completions",
     localModel: "llama3.2",
     cloudModel: "gpt-4o",
-    executionMode: "sandboxed"
+    executionMode: "sandboxed",
+    systemWideAcknowledged: false
   }
 });
 
 const ptySessions = new Map<string, pty.IPty>();
 const paneShellExe = new Map<string, string>();
+const activeAgentControllers = new Map<string, AbortController>();
 let mainWindow: BrowserWindow | null = null;
+
+function writeAppLog(level: "INFO" | "WARN" | "ERROR", message: string): void {
+  try {
+    const logDir = app.getPath("userData");
+    const logPath = path.join(logDir, "vibe-ade.log");
+    const line = `${new Date().toISOString()} [${level}] ${message}\n`;
+    fs.appendFileSync(logPath, line, "utf8");
+  } catch {
+    // Logging must not break app flow.
+  }
+}
 
 function emitPtyData(paneId: string, chunk: string): void {
   mainWindow?.webContents.send("pty:data", { paneId, chunk });
 }
 
 function emitAgentRouted(paneId: string, route: AgentRoute): void {
+  const cloudModel = getVault("cloudModel");
   mainWindow?.webContents.send("agent:routed", {
     paneId,
     route,
-    model: route === "local" ? "Local" : "GPT-4o"
+    model: route === "local" ? "Local" : "Cloud",
+    modelName: route === "local" ? getVault("localModel") : cloudModel
   });
 }
 
@@ -85,6 +101,15 @@ function getProjectRoot(): string {
   return path.resolve(process.cwd());
 }
 
+function destroyPtySession(paneId: string): void {
+  const p = ptySessions.get(paneId);
+  if (p) {
+    p.kill();
+  }
+  ptySessions.delete(paneId);
+  paneShellExe.delete(paneId);
+}
+
 function createPtySession(paneId: string): void {
   if (ptySessions.has(paneId)) return;
 
@@ -124,9 +149,31 @@ function createPtySession(paneId: string): void {
 }
 
 function sanitizeCommandForMode(command: string, mode: ExecutionMode): string {
-  // V1 beta mode: allow full shell command surface in every execution mode.
-  // Mode still controls starting cwd and agent behavior, not command filtering.
-  void mode;
+  if (mode !== "sandboxed") {
+    return command;
+  }
+
+  const trimmed = command.trim();
+  if (!trimmed) {
+    return command;
+  }
+
+  // High-risk operations blocked in project-only mode.
+  const blockedPatterns = [
+    /\b(remove-item|del|erase|rmdir|rd|format|shutdown|reboot)\b/i,
+    /\b(reg\s+delete|takeown|icacls)\b/i
+  ];
+  for (const pattern of blockedPatterns) {
+    if (pattern.test(trimmed)) {
+      throw new Error("Blocked high-risk command in sandboxed mode.");
+    }
+  }
+
+  // Block easy directory escapes from project root.
+  if (/^(cd|chdir|set-location|sl|pushd)\s+\.\./i.test(trimmed)) {
+    throw new Error("Directory traversal outside the project root is blocked in sandboxed mode.");
+  }
+
   return command;
 }
 
@@ -139,20 +186,79 @@ function normalizeShellCommandForExe(command: string, exe: string): string {
 }
 
 async function runLocalAgent(prompt: string): Promise<string> {
-  const model = getVault("localModel");
-  const res = await fetch("http://127.0.0.1:11434/api/generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model, prompt, stream: false })
-  });
-  if (!res.ok) {
-    throw new Error(`Ollama error: ${res.status}`);
+  return runLocalAgentWithSignal(prompt);
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timer);
   }
-  const body = (await res.json()) as { response?: string };
-  return body.response ?? "";
+}
+
+function combineSignals(external?: AbortSignal): AbortController {
+  const controller = new AbortController();
+  if (!external) {
+    return controller;
+  }
+  if (external.aborted) {
+    controller.abort();
+    return controller;
+  }
+  external.addEventListener("abort", () => controller.abort(), { once: true });
+  return controller;
+}
+
+function shouldRetryStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+async function runLocalAgentWithSignal(prompt: string, externalSignal?: AbortSignal): Promise<string> {
+  const model = getVault("localModel");
+  const controller = combineSignals(externalSignal);
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const res = await fetchWithTimeout(
+        "http://127.0.0.1:11434/api/generate",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model, prompt, stream: false }),
+          signal: controller.signal
+        },
+        20000
+      );
+      if (!res.ok) {
+        if (shouldRetryStatus(res.status) && attempt === 0) {
+          continue;
+        }
+        throw new Error(`Ollama error: ${res.status}`);
+      }
+      const body = (await res.json()) as { response?: string };
+      return body.response ?? "";
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error("Agent request was cancelled.");
+      }
+      lastError = error instanceof Error ? error : new Error("Unknown local agent error");
+    }
+  }
+  throw lastError ?? new Error("Unknown local agent error");
 }
 
 async function runCloudAgent(prompt: string, mode: ExecutionMode): Promise<string> {
+  return runCloudAgentWithSignal(prompt, mode);
+}
+
+async function runCloudAgentWithSignal(prompt: string, mode: ExecutionMode, externalSignal?: AbortSignal): Promise<string> {
   const apiKey = decryptKey(getVault("cloudApiKeyEncrypted"));
   if (!apiKey) {
     throw new Error("Cloud API key missing in Settings Vault. Add a key or use /local.");
@@ -165,30 +271,48 @@ async function runCloudAgent(prompt: string, mode: ExecutionMode): Promise<strin
       ? "Return with two sections exactly: [THOUGHT] then [ACTION]. Include ANSI code blocks when useful."
       : "Answer with concise, ANSI-friendly markdown. Prefer fenced code blocks for commands.";
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemInstruction },
-        { role: "user", content: prompt }
-      ],
-      temperature: 0.2
-    })
-  });
-
-  if (!res.ok) {
-    throw new Error(`Cloud API error: ${res.status}`);
+  const controller = combineSignals(externalSignal);
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const res = await fetchWithTimeout(
+        url,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: "system", content: systemInstruction },
+              { role: "user", content: prompt }
+            ],
+            temperature: 0.2
+          }),
+          signal: controller.signal
+        },
+        30000
+      );
+      if (!res.ok) {
+        if (shouldRetryStatus(res.status) && attempt === 0) {
+          continue;
+        }
+        throw new Error(`Cloud API error: ${res.status}`);
+      }
+      const json = (await res.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      return json.choices?.[0]?.message?.content ?? "";
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error("Agent request was cancelled.");
+      }
+      lastError = error instanceof Error ? error : new Error("Unknown cloud agent error");
+    }
   }
-
-  const json = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  return json.choices?.[0]?.message?.content ?? "";
+  throw lastError ?? new Error("Unknown cloud agent error");
 }
 
 function createWindow(): void {
@@ -246,9 +370,24 @@ app.whenReady().then(() => {
   }
 
   createWindow();
+  writeAppLog("INFO", "Application started.");
 
   ipcMain.handle("pane:create", (_, paneId: string) => {
     createPtySession(paneId);
+    writeAppLog("INFO", `Pane created: ${paneId}`);
+  });
+
+  ipcMain.handle("pane:destroy", (_, paneId: string) => {
+    destroyPtySession(paneId);
+    activeAgentControllers.get(paneId)?.abort();
+    activeAgentControllers.delete(paneId);
+    writeAppLog("INFO", `Pane destroyed: ${paneId}`);
+  });
+
+  ipcMain.handle("pane:restart", (_, paneId: string) => {
+    destroyPtySession(paneId);
+    createPtySession(paneId);
+    writeAppLog("INFO", `Pane restarted: ${paneId}`);
   });
 
   ipcMain.handle("pane:resize", (_, paneId: string, cols: number, rows: number) => {
@@ -271,29 +410,44 @@ app.whenReady().then(() => {
       p?.write(`${normalized}\r`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Command blocked";
+      writeAppLog("WARN", `Blocked command in ${mode} mode on ${paneId}: ${message}`);
       emitPtyData(paneId, `\r\n[Vibe-ADE:${mode}] ${message}\r\n`);
+    }
+  });
+
+  ipcMain.handle("agent:cancel", (_, paneId: string) => {
+    const controller = activeAgentControllers.get(paneId);
+    if (controller) {
+      controller.abort();
+      activeAgentControllers.delete(paneId);
     }
   });
 
   ipcMain.handle("agent:run", async (_, paneId: string, route: AgentRoute, prompt: string) => {
     const mode = getVault("executionMode");
+    activeAgentControllers.get(paneId)?.abort();
+    const controller = new AbortController();
+    activeAgentControllers.set(paneId, controller);
     emitAgentRouted(paneId, route);
     try {
       let effectiveRoute = route;
       let text: string;
       if (route === "local") {
-        text = await runLocalAgent(prompt);
+        text = await runLocalAgentWithSignal(prompt, controller.signal);
       } else {
         try {
-          text = await runCloudAgent(prompt, mode);
+          text = await runCloudAgentWithSignal(prompt, mode, controller.signal);
         } catch (cloudError) {
           const cloudMessage = cloudError instanceof Error ? cloudError.message : "Cloud route failed";
+          if (controller.signal.aborted) {
+            throw cloudError;
+          }
           mainWindow?.webContents.send("agent:chunk", {
             paneId,
             chunk: `Cloud route failed: ${cloudMessage}\nFalling back to local model.\n`,
             stream: "action"
           });
-          text = await runLocalAgent(prompt);
+          text = await runLocalAgentWithSignal(prompt, controller.signal);
           effectiveRoute = "local";
           emitAgentRouted(paneId, "local");
         }
@@ -311,7 +465,7 @@ app.whenReady().then(() => {
           done: true
         });
       } else {
-        const routePrefix = effectiveRoute === "local" ? "[Local]\n" : "[GPT-4o]\n";
+        const routePrefix = effectiveRoute === "local" ? `[Local:${getVault("localModel")}]\n` : `[Cloud:${getVault("cloudModel")}]\n`;
         mainWindow?.webContents.send("agent:chunk", {
           paneId,
           chunk: `${routePrefix}${text}\n`,
@@ -320,12 +474,17 @@ app.whenReady().then(() => {
         });
       }
     } catch (error) {
+      writeAppLog("ERROR", `Agent run failed on ${paneId}: ${error instanceof Error ? error.message : "Unknown agent error"}`);
       mainWindow?.webContents.send("agent:chunk", {
         paneId,
         chunk: "",
         error: error instanceof Error ? error.message : "Unknown agent error",
         done: true
       });
+    } finally {
+      if (activeAgentControllers.get(paneId) === controller) {
+        activeAgentControllers.delete(paneId);
+      }
     }
   });
 
@@ -335,11 +494,18 @@ app.whenReady().then(() => {
       cloudApiBaseUrl: getVault("cloudApiBaseUrl"),
       localModel: getVault("localModel"),
       cloudModel: getVault("cloudModel"),
-      executionMode: getVault("executionMode")
+      executionMode: getVault("executionMode"),
+      systemWideAcknowledged: getVault("systemWideAcknowledged")
     };
   });
 
-  ipcMain.handle("vault:set", (_, next: { cloudApiKey?: string; cloudApiBaseUrl?: string; localModel?: string; cloudModel?: string; executionMode?: ExecutionMode }) => {
+  ipcMain.handle("vault:set", (_, next: { cloudApiKey?: string; cloudApiBaseUrl?: string; localModel?: string; cloudModel?: string; executionMode?: ExecutionMode; systemWideAcknowledged?: boolean }) => {
+    if (typeof next.systemWideAcknowledged === "boolean") {
+      setVault("systemWideAcknowledged", next.systemWideAcknowledged);
+    }
+    if (next.executionMode === "system-wide" && !getVault("systemWideAcknowledged")) {
+      throw new Error("System-Wide mode requires acknowledgement in Settings Vault.");
+    }
     if (typeof next.cloudApiKey === "string") setVault("cloudApiKeyEncrypted", encryptKey(next.cloudApiKey));
     if (typeof next.cloudApiBaseUrl === "string") setVault("cloudApiBaseUrl", next.cloudApiBaseUrl);
     if (typeof next.localModel === "string") setVault("localModel", next.localModel);
@@ -347,6 +513,8 @@ app.whenReady().then(() => {
     if (typeof next.executionMode === "string") setVault("executionMode", next.executionMode);
     return true;
   });
+
+  ipcMain.handle("workspace:get", () => getProjectRoot());
 
   ipcMain.handle("runtime:get", () => {
     return {
@@ -361,7 +529,20 @@ app.on("window-all-closed", () => {
   for (const p of ptySessions.values()) {
     p.kill();
   }
+  for (const controller of activeAgentControllers.values()) {
+    controller.abort();
+  }
+  activeAgentControllers.clear();
   ptySessions.clear();
   paneShellExe.clear();
   if (process.platform !== "darwin") app.quit();
+});
+
+process.on("uncaughtException", (error) => {
+  writeAppLog("ERROR", `Uncaught exception: ${error.message}`);
+});
+
+process.on("unhandledRejection", (reason) => {
+  const detail = reason instanceof Error ? reason.message : String(reason);
+  writeAppLog("ERROR", `Unhandled rejection: ${detail}`);
 });

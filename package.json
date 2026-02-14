@@ -9,7 +9,8 @@
     "dev": "npm run build:electron && concurrently \"vite\" \"wait-on tcp:5173 && set VITE_DEV_SERVER_URL=http://localhost:5173&& electron .\"",
     "build": "vite build && npm run build:electron",
     "start": "electron .",
-    "dist:win": "npm run build && electron-builder --win nsis --publish never"
+    "dist:win": "npm run build && electron-builder --win nsis portable --publish never",
+    "dist:win:portable": "npm run build && electron-builder --win portable --publish never"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
@@ -49,12 +50,15 @@
     ],
     "win": {
       "signAndEditExecutable": false,
-      "target": ["nsis"],
-      "artifactName": "Vibe-ADE-${version}-setup.${ext}"
+      "target": ["nsis"]
     },
     "nsis": {
+      "artifactName": "Vibe-ADE-${version}-setup.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    },
+    "portable": {
+      "artifactName": "Vibe-ADE-${version}-portable.${ext}"
     }
   }
 }

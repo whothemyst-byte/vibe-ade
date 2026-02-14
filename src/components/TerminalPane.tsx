@@ -73,7 +73,10 @@ export default function TerminalPane({ paneId, model, filePath, active, onActiva
     window.requestAnimationFrame(() => safeResize());
 
     const onDataDispose = window.vibe.onPtyData(({ paneId: targetId, chunk }) => {
-      if (targetId === paneId) term.write(chunk);
+      if (targetId === paneId) {
+        setSessionStatus("ready");
+        term.write(chunk);
+      }
     });
     const onExitDispose = window.vibe.onPtyExit(({ paneId: targetId }) => {
       if (targetId === paneId) {
@@ -110,6 +113,8 @@ export default function TerminalPane({ paneId, model, filePath, active, onActiva
       onExitDispose();
       onAgentDispose();
       onRoutedDispose();
+      void window.vibe.cancelAgent(paneId);
+      void window.vibe.destroyPane(paneId);
       term.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
@@ -138,6 +143,14 @@ export default function TerminalPane({ paneId, model, filePath, active, onActiva
   }
 
   const hasAgentResponse = useMemo(() => agentThought.length > 0 || agentAction.length > 0, [agentThought, agentAction]);
+
+  async function restartSession(): Promise<void> {
+    await window.vibe.restartPane(paneId);
+    setSessionStatus("ready");
+    setAgentThought("");
+    setAgentAction("");
+    terminalRef.current?.clear();
+  }
 
   return (
     <section className={`terminal-pane ${active ? "active" : ""}`} onMouseDown={() => onActivate(paneId)}>
@@ -169,7 +182,15 @@ export default function TerminalPane({ paneId, model, filePath, active, onActiva
         />
         <div className="pane-prompt-actions">
           <button onClick={() => setCommandText("")}>CLR</button>
-          <button onClick={() => void window.vibe.sendShellLine(paneId, "\u0003")}>STOP</button>
+          <button
+            onClick={() => {
+              void window.vibe.cancelAgent(paneId);
+              void window.vibe.sendShellLine(paneId, "\u0003");
+            }}
+          >
+            STOP
+          </button>
+          {sessionStatus === "exited" && <button onClick={() => void restartSession()}>RESTART</button>}
           <button onClick={() => void submitCommand()}>RUN</button>
         </div>
       </div>

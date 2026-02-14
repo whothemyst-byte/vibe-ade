@@ -10,12 +10,14 @@ export function parseInputLine(line: string): ParsedInput {
     return { kind: "shell", line: "" };
   }
 
-  if (trimmed.startsWith("/local")) {
-    return { kind: "agent", route: "local", prompt: trimmed.replace("/local", "").trim() };
+  const localMatch = trimmed.match(/^\/local(?:\s+(.*))?$/);
+  if (localMatch) {
+    return { kind: "agent", route: "local", prompt: (localMatch[1] ?? "").trim() };
   }
 
-  if (trimmed.startsWith("/cloud")) {
-    return { kind: "agent", route: "cloud", prompt: trimmed.replace("/cloud", "").trim() };
+  const cloudMatch = trimmed.match(/^\/cloud(?:\s+(.*))?$/);
+  if (cloudMatch) {
+    return { kind: "agent", route: "cloud", prompt: (cloudMatch[1] ?? "").trim() };
   }
 
   return { kind: "shell", line };

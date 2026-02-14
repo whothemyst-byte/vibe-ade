@@ -12,7 +12,8 @@ const defaultVault: VaultSettings = {
   cloudApiBaseUrl: "https://api.openai.com/v1/chat/completions",
   localModel: "llama3.2",
   cloudModel: "gpt-4o",
-  executionMode: "sandboxed"
+  executionMode: "sandboxed",
+  systemWideAcknowledged: false
 };
 
 export default function SettingsVault({ open, onClose, onExecutionModeChanged }: SettingsVaultProps) {
@@ -37,6 +38,9 @@ export default function SettingsVault({ open, onClose, onExecutionModeChanged }:
     }
     if (!vault.cloudModel.trim()) {
       return "Cloud model cannot be empty.";
+    }
+    if (vault.executionMode === "system-wide" && !vault.systemWideAcknowledged) {
+      return "You must acknowledge System-Wide mode risk before saving.";
     }
     return "";
   }
@@ -132,6 +136,16 @@ export default function SettingsVault({ open, onClose, onExecutionModeChanged }:
             Dual-Stream (thought/action split)
           </label>
         </div>
+        {vault.executionMode === "system-wide" && (
+          <label>
+            <input
+              type="checkbox"
+              checked={vault.systemWideAcknowledged}
+              onChange={(e) => setVault((prev) => ({ ...prev, systemWideAcknowledged: e.target.checked }))}
+            />
+            I understand System-Wide mode can run commands outside this project.
+          </label>
+        )}
         <div className="vault-hint">Mode applies to newly created shell sessions. Existing panes may require restart.</div>
         {errorText && <div className="vault-error">{errorText}</div>}
 

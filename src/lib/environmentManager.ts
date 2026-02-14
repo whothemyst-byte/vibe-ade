@@ -1,5 +1,10 @@
 import type { LayoutTemplate, ModelProvider } from "../types";
 
+interface EnvironmentSnapshot {
+  template: LayoutTemplate;
+  modelByPane: Record<string, ModelProvider>;
+}
+
 export class EnvironmentManager {
   private template: LayoutTemplate = 2;
   private modelByPane = new Map<string, ModelProvider>();
@@ -43,5 +48,27 @@ export class EnvironmentManager {
 
   getModel(paneId: string): ModelProvider {
     return this.modelByPane.get(paneId) ?? "Local";
+  }
+
+  getSnapshot(): EnvironmentSnapshot {
+    const modelByPane: Record<string, ModelProvider> = {};
+    for (const paneId of this.paneIds) {
+      modelByPane[paneId] = this.getModel(paneId);
+    }
+    return {
+      template: this.template,
+      modelByPane
+    };
+  }
+
+  loadSnapshot(snapshot: EnvironmentSnapshot): string[] {
+    const paneIds = this.applyTemplate(snapshot.template);
+    for (const paneId of paneIds) {
+      const model = snapshot.modelByPane[paneId];
+      if (model === "Local" || model === "Cloud") {
+        this.modelByPane.set(paneId, model);
+      }
+    }
+    return paneIds;
   }
 }

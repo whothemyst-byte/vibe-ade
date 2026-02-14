@@ -3,89 +3,118 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vibe-ADE Download</title>
+    <title>Vibe-ADE | Windows Agent Development Environment</title>
+    <meta
+      name="description"
+      content="Vibe-ADE is a Windows-first Agent Development Environment with multi-pane terminals, slash model routing, and secure settings vault."
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
-    <style>
-      :root {
-        --bg: #0d0d0d;
-        --card: #161616cc;
-        --border: #333;
-        --text: #ededed;
-        --dim: #a0a0a0;
-        --accent: #8bffc4;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        background: radial-gradient(circle at 20% 10%, #1f1f1f 0%, var(--bg) 45%, #090909 100%);
-        color: var(--text);
-        font-family: Inter, "Segoe UI", sans-serif;
-        display: grid;
-        place-items: center;
-        padding: 20px;
-      }
-      .card {
-        width: min(720px, 100%);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        background: var(--card);
-        backdrop-filter: blur(8px);
-        padding: 28px;
-      }
-      h1 { margin: 0; font-size: 2rem; }
-      p { color: var(--dim); line-height: 1.5; }
-      .meta {
-        display: flex;
-        gap: 8px;
-        margin: 16px 0 24px;
-        flex-wrap: wrap;
-      }
-      .tag {
-        font-size: 0.75rem;
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        padding: 4px 10px;
-        color: var(--dim);
-      }
-      .actions {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
-      .btn {
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 11px 16px;
-        border-radius: 10px;
-        border: 1px solid var(--border);
-        color: var(--text);
-        background: #1d1d1d;
-        font-weight: 600;
-      }
-      .btn.primary {
-        background: linear-gradient(135deg, #1b3c31, #103027);
-        border-color: #2d6d57;
-      }
-    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main class="card">
-      <h1>Vibe-ADE</h1>
-      <p>Windows-first Agent Development Environment with multi-pane terminals, slash routing, and secure model vault settings.</p>
-      <div class="meta">
-        <span class="tag">Windows</span>
-        <span class="tag">Version v0.1.0-beta</span>
-        <span class="tag">Electron + React</span>
-      </div>
-      <div class="actions">
-        <a class="btn primary" href="https://github.com/whothemyst-byte/vibe-ade/raw/refs/tags/v0.1.0-beta/release/Vibe-ADE-0.1.0-setup.exe">Download .exe</a>
-        <a class="btn" href="https://github.com/whothemyst-byte/vibe-ade/blob/v0.1.0-beta/RELEASE_NOTES_v0.1.0-beta.md">Release Notes</a>
-      </div>
+    <header class="nav-wrap">
+      <nav class="nav container">
+        <a class="brand" href="#top">Vibe-ADE</a>
+        <div class="nav-links">
+          <a href="#features">Features</a>
+          <a href="#screens">Screens</a>
+          <a href="#faq">FAQ</a>
+          <a href="#download">Download</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero container reveal">
+        <div class="hero-copy">
+          <div class="chip-row">
+            <span class="chip">Windows Native</span>
+            <span class="chip">v0.1.0-beta</span>
+            <span class="chip">Local + Cloud</span>
+          </div>
+          <h1>Code, run, and route agents from one high-speed terminal workspace.</h1>
+          <p>
+            Vibe-ADE gives you multi-pane execution, per-pane prompts, secure API vault settings, and slash command routing so your local and cloud workflows stay in sync.
+          </p>
+          <div class="hero-cta">
+            <a class="btn btn-primary" id="download" href="https://github.com/whothemyst-byte/vibe-ade/raw/refs/tags/v0.1.0-beta/release/Vibe-ADE-0.1.0-portable.exe">Download for Windows (.exe)</a>
+            <a class="btn" href="https://github.com/whothemyst-byte/vibe-ade/blob/v0.1.0-beta/RELEASE_NOTES_v0.1.0-beta.md">Read Release Notes</a>
+          </div>
+        </div>
+        <div class="hero-panel">
+          <div class="terminal-mock">
+            <div class="mock-head">
+              <span>workspace: C:\Vibe-ADE</span>
+              <span class="mock-status">Local</span>
+            </div>
+            <pre>
+> /local generate migration plan
+[Action] Generated plan with 4 steps...
+> ls
+README.md  src  electron  website  release
+> npm run dist:win
+Built Vibe-ADE-0.1.0-setup.exe
+            </pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="section container reveal">
+        <h2>Built for real terminal-heavy workflows</h2>
+        <div class="feature-grid">
+          <article class="card"><h3>Multi-pane Execution</h3><p>Switch between 2, 4, and 6 terminal templates and keep each pane independently active.</p></article>
+          <article class="card"><h3>Slash Routing</h3><p>Use <code>/local</code> and <code>/cloud</code> directly in prompt flows with cloud fallback to local.</p></article>
+          <article class="card"><h3>Secure Settings Vault</h3><p>Store API keys with Electron safe storage and manage model preferences in one place.</p></article>
+          <article class="card"><h3>Execution Modes</h3><p>Sandboxed, system-wide, and dual-stream thought/action behavior for different risk levels.</p></article>
+          <article class="card"><h3>Warp-style UI</h3><p>Per-pane prompts, output-focused terminals, and smooth glassmorphic dark visuals.</p></article>
+          <article class="card"><h3>Windows Native Shell</h3><p>Runs PowerShell/cmd-native commands through node-pty, including common aliases like <code>ls</code>.</p></article>
+        </div>
+      </section>
+
+      <section id="screens" class="section container reveal">
+        <h2>Product Preview</h2>
+        <div class="screen-grid">
+          <article class="screen-card"><div class="screen-tag">Workspace</div><h3>Command View</h3><p>Multi-terminal live execution with per-pane model status and action responses.</p></article>
+          <article class="screen-card"><div class="screen-tag">Routing</div><h3>Agent Flows</h3><p>Slash-routed prompts for local/cloud model selection without context switching.</p></article>
+          <article class="screen-card"><div class="screen-tag">Control</div><h3>Settings Vault</h3><p>Configure API keys, execution mode, and runtime behavior from one secure panel.</p></article>
+        </div>
+      </section>
+
+      <section class="section container reveal">
+        <h2>How it works</h2>
+        <div class="steps">
+          <article class="step"><span>1</span><h3>Install</h3><p>Download and run the Windows installer.</p></article>
+          <article class="step"><span>2</span><h3>Configure</h3><p>Set local/cloud models and execution mode in Settings Vault.</p></article>
+          <article class="step"><span>3</span><h3>Ship</h3><p>Run shell commands and agent prompts from per-pane prompt bars.</p></article>
+        </div>
+      </section>
+
+      <section id="faq" class="section container reveal">
+        <h2>FAQ</h2>
+        <div class="faq-list">
+          <details><summary>Does Vibe-ADE work offline?</summary><p>Yes for local routing via Ollama. Cloud routing requires internet and a valid API key.</p></details>
+          <details><summary>Which platforms are supported?</summary><p>Current release target is Windows desktop.</p></details>
+          <details><summary>Where do I report beta issues?</summary><p>Use the GitHub repository issues tab to report crashes or UX bugs.</p></details>
+          <details><summary>How do updates work?</summary><p>Check release notes and download the latest installer from the release tag.</p></details>
+        </div>
+      </section>
+
+      <section class="section container reveal cta-band">
+        <h2>Ready to test Vibe-ADE?</h2>
+        <p>Install the beta and run your first local or cloud-routed command in minutes.</p>
+        <a class="btn btn-primary" href="https://github.com/whothemyst-byte/vibe-ade/raw/refs/tags/v0.1.0-beta/release/Vibe-ADE-0.1.0-portable.exe">Download v0.1.0-beta</a>
+      </section>
     </main>
+
+    <footer class="footer container">
+      <span>Vibe-ADE</span>
+      <a href="https://github.com/whothemyst-byte/vibe-ade">GitHub</a>
+      <a href="https://github.com/whothemyst-byte/vibe-ade/blob/v0.1.0-beta/RELEASE_NOTES_v0.1.0-beta.md">Release Notes</a>
+      <span>Version v0.1.0-beta</span>
+    </footer>
+
+    <script src="./script.js"></script>
   </body>
 </html>
