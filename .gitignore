@@ -5,3 +5,4 @@ dist-electron
 *.log
 release/*
 !release/Vibe-ADE-0.1.0-setup.exe
+!release/Vibe-ADE-0.1.0-portable.exe

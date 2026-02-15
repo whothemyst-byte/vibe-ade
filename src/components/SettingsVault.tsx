@@ -22,22 +22,8 @@ export default function SettingsVault({ open, onClose, onExecutionModeChanged }:
   const [errorText, setErrorText] = useState("");
 
   function validateVault(): string {
-    if (!vault.cloudApiBaseUrl.trim()) {
-      return "Cloud API URL is required.";
-    }
-    try {
-      const parsed = new URL(vault.cloudApiBaseUrl);
-      if (parsed.protocol !== "https:") {
-        return "Cloud API URL must use https.";
-      }
-    } catch {
-      return "Cloud API URL must be a valid URL.";
-    }
     if (!vault.localModel.trim()) {
       return "Local model cannot be empty.";
-    }
-    if (!vault.cloudModel.trim()) {
-      return "Cloud model cannot be empty.";
     }
     if (vault.executionMode === "system-wide" && !vault.systemWideAcknowledged) {
       return "You must acknowledge System-Wide mode risk before saving.";
@@ -79,31 +65,8 @@ export default function SettingsVault({ open, onClose, onExecutionModeChanged }:
         <h2>Settings Vault</h2>
 
         <label>
-          Cloud API Key
-          <input
-            type="password"
-            value={vault.cloudApiKey}
-            onChange={(e) => setVault((prev) => ({ ...prev, cloudApiKey: e.target.value }))}
-          />
-        </label>
-        {!vault.cloudApiKey.trim() && <div className="vault-hint">Cloud key is empty. `/cloud` will fallback to local.</div>}
-
-        <label>
-          Cloud API URL
-          <input
-            value={vault.cloudApiBaseUrl}
-            onChange={(e) => setVault((prev) => ({ ...prev, cloudApiBaseUrl: e.target.value }))}
-          />
-        </label>
-
-        <label>
           Local Model (Ollama)
           <input value={vault.localModel} onChange={(e) => setVault((prev) => ({ ...prev, localModel: e.target.value }))} />
-        </label>
-
-        <label>
-          Cloud Model
-          <input value={vault.cloudModel} onChange={(e) => setVault((prev) => ({ ...prev, cloudModel: e.target.value }))} />
         </label>
 
         <div className="mode-group">

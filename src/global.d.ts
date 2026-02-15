@@ -6,9 +6,12 @@ interface VibeBridge {
   restartPane: (paneId: string) => Promise<void>;
   resizePane: (paneId: string, cols: number, rows: number) => Promise<void>;
   sendShellLine: (paneId: string, line: string) => Promise<void>;
-  runAgent: (paneId: string, route: "local" | "cloud", prompt: string) => Promise<void>;
+  sendShellInput: (paneId: string, input: string) => Promise<void>;
+  runAgent: (paneId: string, route: "local", prompt: string) => Promise<void>;
   cancelAgent: (paneId: string) => Promise<void>;
   getWorkspacePath: () => Promise<string>;
+  createProjectWorkspace: () => Promise<string | null>;
+  openProjectWorkspace: () => Promise<string | null>;
   getRuntime: () => Promise<RuntimeInfo>;
   getVault: () => Promise<VaultSettings>;
   setVault: (next: Partial<VaultSettings> & { executionMode?: ExecutionMode }) => Promise<boolean>;

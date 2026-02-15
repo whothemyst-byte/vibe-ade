@@ -15,10 +15,5 @@ export function parseInputLine(line: string): ParsedInput {
     return { kind: "agent", route: "local", prompt: (localMatch[1] ?? "").trim() };
   }
 
-  const cloudMatch = trimmed.match(/^\/cloud(?:\s+(.*))?$/);
-  if (cloudMatch) {
-    return { kind: "agent", route: "cloud", prompt: (cloudMatch[1] ?? "").trim() };
-  }
-
   return { kind: "shell", line };
 }

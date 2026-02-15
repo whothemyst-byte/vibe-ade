@@ -23,7 +23,7 @@ interface AgentRoutedEvent {
   paneId: string;
   model: "Local" | "Cloud";
   modelName: string;
-  route: "local" | "cloud";
+  route: "local";
 }
 
 interface PtyDataEvent {
@@ -47,9 +47,12 @@ const api = {
   restartPane: (paneId: string) => ipcRenderer.invoke("pane:restart", paneId),
   resizePane: (paneId: string, cols: number, rows: number) => ipcRenderer.invoke("pane:resize", paneId, cols, rows),
   sendShellLine: (paneId: string, line: string) => ipcRenderer.invoke("shell:line", paneId, line),
-  runAgent: (paneId: string, route: "local" | "cloud", prompt: string) => ipcRenderer.invoke("agent:run", paneId, route, prompt),
+  sendShellInput: (paneId: string, input: string) => ipcRenderer.invoke("shell:input", paneId, input),
+  runAgent: (paneId: string, route: "local", prompt: string) => ipcRenderer.invoke("agent:run", paneId, route, prompt),
   cancelAgent: (paneId: string) => ipcRenderer.invoke("agent:cancel", paneId),
   getWorkspacePath: () => ipcRenderer.invoke("workspace:get") as Promise<string>,
+  createProjectWorkspace: () => ipcRenderer.invoke("workspace:create") as Promise<string | null>,
+  openProjectWorkspace: () => ipcRenderer.invoke("workspace:open") as Promise<string | null>,
   getRuntime: () => ipcRenderer.invoke("runtime:get") as Promise<RuntimeInfo>,
   getVault: () => ipcRenderer.invoke("vault:get") as Promise<VaultSettings>,
   setVault: (next: Partial<VaultSettings> & { executionMode?: ExecutionMode }) => ipcRenderer.invoke("vault:set", next),

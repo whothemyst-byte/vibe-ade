@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, safeStorage } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, safeStorage } from "electron";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
@@ -6,7 +6,7 @@ import Store from "electron-store";
 import * as pty from "node-pty";
 
 type ExecutionMode = "sandboxed" | "system-wide" | "dual-stream";
-type AgentRoute = "local" | "cloud";
+type AgentRoute = "local";
 
 interface VaultData {
   cloudApiKeyEncrypted: string;
@@ -33,6 +33,7 @@ const ptySessions = new Map<string, pty.IPty>();
 const paneShellExe = new Map<string, string>();
 const activeAgentControllers = new Map<string, AbortController>();
 let mainWindow: BrowserWindow | null = null;
+let workspaceRootPath = path.resolve(process.cwd());
 
 function writeAppLog(level: "INFO" | "WARN" | "ERROR", message: string): void {
   try {
@@ -50,12 +51,11 @@ function emitPtyData(paneId: string, chunk: string): void {
 }
 
 function emitAgentRouted(paneId: string, route: AgentRoute): void {
-  const cloudModel = getVault("cloudModel");
   mainWindow?.webContents.send("agent:routed", {
     paneId,
     route,
-    model: route === "local" ? "Local" : "Cloud",
-    modelName: route === "local" ? getVault("localModel") : cloudModel
+    model: "Local",
+    modelName: getVault("localModel")
   });
 }
 
@@ -98,7 +98,7 @@ function shellPath(): string {
 }
 
 function getProjectRoot(): string {
-  return path.resolve(process.cwd());
+  return workspaceRootPath;
 }
 
 function destroyPtySession(paneId: string): void {
@@ -139,6 +139,10 @@ function createPtySession(paneId: string): void {
   });
 
   p.onExit(() => {
+    // Ignore stale exits from previously destroyed/replaced sessions.
+    if (ptySessions.get(paneId) !== p) {
+      return;
+    }
     ptySessions.delete(paneId);
     paneShellExe.delete(paneId);
     mainWindow?.webContents.send("pty:exit", { paneId });
@@ -149,31 +153,7 @@ function createPtySession(paneId: string): void {
 }
 
 function sanitizeCommandForMode(command: string, mode: ExecutionMode): string {
-  if (mode !== "sandboxed") {
-    return command;
-  }
-
-  const trimmed = command.trim();
-  if (!trimmed) {
-    return command;
-  }
-
-  // High-risk operations blocked in project-only mode.
-  const blockedPatterns = [
-    /\b(remove-item|del|erase|rmdir|rd|format|shutdown|reboot)\b/i,
-    /\b(reg\s+delete|takeown|icacls)\b/i
-  ];
-  for (const pattern of blockedPatterns) {
-    if (pattern.test(trimmed)) {
-      throw new Error("Blocked high-risk command in sandboxed mode.");
-    }
-  }
-
-  // Block easy directory escapes from project root.
-  if (/^(cd|chdir|set-location|sl|pushd)\s+\.\./i.test(trimmed)) {
-    throw new Error("Directory traversal outside the project root is blocked in sandboxed mode.");
-  }
-
+  void mode;
   return command;
 }
 
@@ -252,67 +232,6 @@ async function runLocalAgentWithSignal(prompt: string, externalSignal?: AbortSig
     }
   }
   throw lastError ?? new Error("Unknown local agent error");
-}
-
-async function runCloudAgent(prompt: string, mode: ExecutionMode): Promise<string> {
-  return runCloudAgentWithSignal(prompt, mode);
-}
-
-async function runCloudAgentWithSignal(prompt: string, mode: ExecutionMode, externalSignal?: AbortSignal): Promise<string> {
-  const apiKey = decryptKey(getVault("cloudApiKeyEncrypted"));
-  if (!apiKey) {
-    throw new Error("Cloud API key missing in Settings Vault. Add a key or use /local.");
-  }
-
-  const url = getVault("cloudApiBaseUrl");
-  const model = getVault("cloudModel");
-  const systemInstruction =
-    mode === "dual-stream"
-      ? "Return with two sections exactly: [THOUGHT] then [ACTION]. Include ANSI code blocks when useful."
-      : "Answer with concise, ANSI-friendly markdown. Prefer fenced code blocks for commands.";
-
-  const controller = combineSignals(externalSignal);
-  let lastError: Error | null = null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const res = await fetchWithTimeout(
-        url,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: "system", content: systemInstruction },
-              { role: "user", content: prompt }
-            ],
-            temperature: 0.2
-          }),
-          signal: controller.signal
-        },
-        30000
-      );
-      if (!res.ok) {
-        if (shouldRetryStatus(res.status) && attempt === 0) {
-          continue;
-        }
-        throw new Error(`Cloud API error: ${res.status}`);
-      }
-      const json = (await res.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-      return json.choices?.[0]?.message?.content ?? "";
-    } catch (error) {
-      if (controller.signal.aborted) {
-        throw new Error("Agent request was cancelled.");
-      }
-      lastError = error instanceof Error ? error : new Error("Unknown cloud agent error");
-    }
-  }
-  throw lastError ?? new Error("Unknown cloud agent error");
 }
 
 function createWindow(): void {
@@ -415,6 +334,15 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle("shell:input", (_, paneId: string, input: string) => {
+    const p = ptySessions.get(paneId);
+    if (!p) {
+      return;
+    }
+    p.write(input);
+    writeAppLog("INFO", `Raw input forwarded to ${paneId} (${input.length} chars)`);
+  });
+
   ipcMain.handle("agent:cancel", (_, paneId: string) => {
     const controller = activeAgentControllers.get(paneId);
     if (controller) {
@@ -424,35 +352,13 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("agent:run", async (_, paneId: string, route: AgentRoute, prompt: string) => {
-    const mode = getVault("executionMode");
     activeAgentControllers.get(paneId)?.abort();
     const controller = new AbortController();
     activeAgentControllers.set(paneId, controller);
     emitAgentRouted(paneId, route);
     try {
-      let effectiveRoute = route;
-      let text: string;
-      if (route === "local") {
-        text = await runLocalAgentWithSignal(prompt, controller.signal);
-      } else {
-        try {
-          text = await runCloudAgentWithSignal(prompt, mode, controller.signal);
-        } catch (cloudError) {
-          const cloudMessage = cloudError instanceof Error ? cloudError.message : "Cloud route failed";
-          if (controller.signal.aborted) {
-            throw cloudError;
-          }
-          mainWindow?.webContents.send("agent:chunk", {
-            paneId,
-            chunk: `Cloud route failed: ${cloudMessage}\nFalling back to local model.\n`,
-            stream: "action"
-          });
-          text = await runLocalAgentWithSignal(prompt, controller.signal);
-          effectiveRoute = "local";
-          emitAgentRouted(paneId, "local");
-        }
-      }
-
+      const mode = getVault("executionMode");
+      const text = await runLocalAgentWithSignal(prompt, controller.signal);
       if (mode === "dual-stream" && text.includes("[ACTION]")) {
         const [thoughtRaw, actionRaw] = text.split("[ACTION]");
         const thought = thoughtRaw.replace("[THOUGHT]", "").trim();
@@ -465,7 +371,7 @@ app.whenReady().then(() => {
           done: true
         });
       } else {
-        const routePrefix = effectiveRoute === "local" ? `[Local:${getVault("localModel")}]\n` : `[Cloud:${getVault("cloudModel")}]\n`;
+        const routePrefix = `[Local:${getVault("localModel")}]\n`;
         mainWindow?.webContents.send("agent:chunk", {
           paneId,
           chunk: `${routePrefix}${text}\n`,
@@ -512,6 +418,34 @@ app.whenReady().then(() => {
     if (typeof next.cloudModel === "string") setVault("cloudModel", next.cloudModel);
     if (typeof next.executionMode === "string") setVault("executionMode", next.executionMode);
     return true;
+  });
+
+  ipcMain.handle("workspace:create", async () => {
+    const result = await dialog.showOpenDialog({
+      title: "Create New Project",
+      buttonLabel: "Select Folder",
+      properties: ["openDirectory", "createDirectory"]
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+    workspaceRootPath = result.filePaths[0];
+    writeAppLog("INFO", `Workspace selected via create: ${workspaceRootPath}`);
+    return workspaceRootPath;
+  });
+
+  ipcMain.handle("workspace:open", async () => {
+    const result = await dialog.showOpenDialog({
+      title: "Open Project",
+      buttonLabel: "Open Folder",
+      properties: ["openDirectory"]
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+    workspaceRootPath = result.filePaths[0];
+    writeAppLog("INFO", `Workspace selected via open: ${workspaceRootPath}`);
+    return workspaceRootPath;
   });
 
   ipcMain.handle("workspace:get", () => getProjectRoot());
